@@ -1,6 +1,30 @@
+(function(){
+  var indexedDB = window.indexedDB || window.webkitIndexedDB,
+      dbInfo = {
+        db: null,
+        version: 1
+      };
 
-var idb = window.indexedDB || window.webkitIndexedDB,
-  db;
+  function isUpgradeNeeded(dbInfo){
+    if(!dbInfo.db){
+      return true;
+    }
+
+    var isNewStore = !dbInfo.db.objectStoreNames.contains(dbInfo.store);
+
+    if(isNewStore){
+      dbInfo.version = dbInfo.db.version + 1;
+      return true;
+    }
+  }
+
+  function getConnection(dbInfo){
+    return new Promise(function(resolve, reject){
+
+    });
+  }
+}());
+
 
 function createTable(dbInfo, tablename){
 
