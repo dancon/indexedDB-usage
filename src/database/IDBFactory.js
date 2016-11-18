@@ -4,6 +4,9 @@ const _getConnection = Symbol('class [IDBFactory] inner method _getConnection'),
   _INDEXEDDB = Symbol('class [IDBFactory] inner property _INDEXEDDB'),
   _dbConnectionPromise = Symbol('class [IDBFactory] inner property _dbConnectionPromise'),
   _init = Symbol('class [IDBFactory] inner method _init'),
+  _operationQueen = Symbol('class [IDBFactory] inner property _operationQueen'),
+  _pushInQueen = Symbol('class [IDBFactory] inner method _pushInQueen'),
+  _popFromQueen = Symbol('class [IDBFactory] inner method _popFromQueen'),
 
   toString = Object.prototype.toString;
 
@@ -33,6 +36,7 @@ class IDBFactory{
     this[_INDEXEDDB] = window.indexedDB || window.webkitIndexedDB;
 
     this[_dbConnectionPromise] = this[_init](dbName);
+    this[_operationQueen] = []; // 用来保存
 
     excuteCallback(this[_dbConnectionPromise], () => {
       toString.call(success) === '[object Function]' && success(self);
@@ -220,6 +224,10 @@ class IDBFactory{
     }
 
     return false;
+  }
+
+  [_pushInQueen](dbInfo){
+
   }
 }
 export default IDBFactory;
