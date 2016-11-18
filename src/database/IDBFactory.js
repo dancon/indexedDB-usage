@@ -5,6 +5,7 @@ const _getConnection = Symbol('class [IDBFactory] inner method _getConnection'),
   _dbConnectionPromise = Symbol('class [IDBFactory] inner property _dbConnectionPromise'),
   _init = Symbol('class [IDBFactory] inner method _init'),
   _operationQueen = Symbol('class [IDBFactory] inner property _operationQueen'),
+  _status = Symbol('class [IDBFactory] inner property _status'),
   _pushInQueen = Symbol('class [IDBFactory] inner method _pushInQueen'),
   _popFromQueen = Symbol('class [IDBFactory] inner method _popFromQueen'),
 
@@ -37,6 +38,7 @@ class IDBFactory{
 
     this[_dbConnectionPromise] = this[_init](dbName);
     this[_operationQueen] = []; // 用来保存
+    this[_status] = 'done';
 
     excuteCallback(this[_dbConnectionPromise], () => {
       toString.call(success) === '[object Function]' && success(self);
@@ -75,49 +77,67 @@ class IDBFactory{
   }
 
   createTable(tableName, param){
-    var dbPromise = this[_dbConnectionPromise],
-      dbInfo = {
-        name: this.name,
-        tableInfo: {
-          name: tableName
-        }
-      }, self = this, promise;
+    var queenObj = {};
 
-    if(param && param.keyPath){
-      dbInfo.tableInfo.param = param;
-    }
-
-    promise = Promise.all([dbPromise]).then(function(){
-      dbInfo.db = self.db;
-      dbInfo.version = self.version;
-
-      // 更新 IDBFactory 实例中的 _dbConnectionPromise
-      self[_dbConnectionPromise] = self[_getConnection](dbInfo, self[_isUpgradeNeeded](dbInfo), (response) => {
-        var db = response.db,
-          dbInfo = response.dbInfo,
-          event = response.event;
-
-        console.log('createTable', dbInfo.tableInfo.name);
-        try{
-          db.createObjectStore(dbInfo.tableInfo.name, dbInfo.tableInfo.param);
-        }catch(exception){
-          if(exception.name == 'ConstraintError'){
-            console.warn('The database "' + dbInfo.name + '"' +
-              ' has been upgraded from version ' + event.oldVersion +
-              ' to version ' + event.newVersion +
-              ', but the storage "' + dbInfo.tableInfo.name + '" already exists.');
-          }else{
-            throw exception;
-          }
-        }
-      });
-    }).then(function(db){
-      // 更新 IDBFactory 实例中的 db, 并创建 IObjectStore 对象
-      self.db = db;
-      return db;
+    queenObj.promise = new Promise(function(resolve){
+      queenObj.resolve = resolve;
     });
 
-    return promise;
+    queenObj.promise.then(() => {
+      var dbPromise = this[_dbConnectionPromise],
+        dbInfo = {
+          name: this.name,
+          tableInfo: {
+            name: tableName
+          }
+        }, self = this;
+
+      if(param && param.keyPath){
+        dbInfo.tableInfo.param = param;
+      }
+
+      console.log('callback', tableName);
+
+      Promise.all([dbPromise]).then(function(){
+        dbInfo.db = self.db;
+        dbInfo.version = self.version;
+
+        self[_status] = 'pending';
+        // 更新 IDBFactory 实例中的 _dbConnectionPromise
+        console.log('createTable', tableName, self.version);
+        self[_dbConnectionPromise] = self[_getConnection](dbInfo, self[_isUpgradeNeeded](dbInfo), (response) => {
+          var db = response.db,
+            dbInfo = response.dbInfo,
+            event = response.event;
+
+          console.log('createTable', dbInfo.tableInfo.name);
+          try{
+            db.createObjectStore(dbInfo.tableInfo.name, dbInfo.tableInfo.param);
+          }catch(exception){
+            if(exception.name == 'ConstraintError'){
+              console.warn('The database "' + dbInfo.name + '"' +
+                ' has been upgraded from version ' + event.oldVersion +
+                ' to version ' + event.newVersion +
+                ', but the storage "' + dbInfo.tableInfo.name + '" already exists.');
+            }else{
+              throw exception;
+            }
+          }
+        });
+      }).then(function(db){
+        // 更新 IDBFactory 实例中的 db, 并创建 IObjectStore 对象
+        self.db = db;
+        return db;
+      });
+    });
+
+    this[_operationQueen].push(queenObj);
+
+    console.log('createTable', tableName, this[_status]);
+    if(this[_status] == 'done'){
+      this[_operationQueen].pop().resolve();
+      this[_status] = 'pending';
+    }
   }
 
   deleteTable(tableName){
@@ -176,6 +196,7 @@ class IDBFactory{
 
       isUpgradeNeeded && dbParam.push(dbInfo.version);
 
+      console.log('getConnection dbParam', dbParam);
       idbOpenRequest = indexedDB.open.apply(indexedDB, dbParam);
 
       console.log('_getConnection', dbInfo, 'isUpgradeNeeded', isUpgradeNeeded);
@@ -195,7 +216,13 @@ class IDBFactory{
       }
 
       idbOpenRequest.onsuccess = function(){
+        self[_status] = 'done';
         resolve(idbOpenRequest.result);
+        console.log('getConnection success', idbOpenRequest.result.version);
+
+        if(self[_operationQueen].length){
+         self[_operationQueen].pop().resolve();
+         }
       }
     });
   }
@@ -216,6 +243,7 @@ class IDBFactory{
     if (isUpgrade || isNewStore) {
       if (isNewStore) {
         var incVersion = dbInfo.db.version + 1;
+        console.log('isUpgradeNeeded incVersion', incVersion);
         if (incVersion > dbInfo.version) {
           dbInfo.version = this.version = incVersion;
         }
