@@ -1,23 +1,25 @@
 import IDBFactory from './database/IDBFactory';
 
 // 用来保存不同的数据库实例
-const dataBaseMap = {};
+const _dataBaseMap = Symbol('class [DBMS] inner property _dataBaseMap');
 
 class DBMS{
   constructor(){
-
+    this[_dataBaseMap] = {};
   }
 
-  createDatabase(databaseName){
-    if(!dataBaseMap[databaseName]){
-      dataBaseMap[databaseName] = new IDBFactory(databaseName);
+  createDatabase(databaseName, success, error){
+    var dbms = this;
+
+    if(!this[_dataBaseMap][databaseName]){
+      this[_dataBaseMap][databaseName] = new IDBFactory(databaseName, success, error);
     }
 
-    return this.getDatabase(databaseName);
+    return dbms.getDatabase(databaseName);
   }
 
   getDatabase(databaseName){
-    return dataBaseMap[dataBaseMap];
+    return this[_dataBaseMap][databaseName];
   }
 
   deleteDatabase(databaseName){

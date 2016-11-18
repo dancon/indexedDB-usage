@@ -2,10 +2,10 @@ var path = require('path');
 
 module.exports = {
   context: path.resolve(__dirname, 'src'),
-  entry: './DBMS.js',
+  entry: './index.js',
   output: {
     path: path.resolve(__dirname, 'bin'),
-    filename: 'dbms.js'
+    filename: 'index.bundle.js'
   },
   module: {
     loaders: [
