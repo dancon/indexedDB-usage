@@ -54,11 +54,23 @@
 
 	var dbObj = _DBMS2.default.createDatabase('idbtest');
 
-	dbObj.createTable('testTable');
+	dbObj.createObjectStore('testTable');
 
-	dbObj.createTable('userInfo', { keyPath: 'userId' });
+	dbObj.createObjectStore('userInfo', { keyPath: 'userId' });
 
-	dbObj.createTable('gradeInfo');
+	var gradeTable = dbObj.createObjectStore('gradeInfo');
+
+	/*
+	console.log(gradeTable);
+	gradeTable.then(function(table){
+	  console.log('create table gradeInfo success, table is', table);
+	  table.setItem('grade', {
+	    name: 'John',
+	    age: 23
+	  }).then(function(value){
+	    console.log('setItem success, value is', value);
+	  });
+	});*/
 
 /***/ },
 /* 1 */
@@ -121,7 +133,7 @@
 
 /***/ },
 /* 2 */
-/***/ function(module, exports) {
+/***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
 
@@ -131,6 +143,12 @@
 
 	var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
 
+	var _IObjectStore = __webpack_require__(3);
+
+	var _IObjectStore2 = _interopRequireDefault(_IObjectStore);
+
+	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
 	function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
 
 	// 私有属性和方法
@@ -139,10 +157,10 @@
 	    _INDEXEDDB = Symbol('class [IDBFactory] inner property _INDEXEDDB'),
 	    _dbConnectionPromise = Symbol('class [IDBFactory] inner property _dbConnectionPromise'),
 	    _init = Symbol('class [IDBFactory] inner method _init'),
-	    _operationQueen = Symbol('class [IDBFactory] inner property _operationQueen'),
+	    _operationQueue = Symbol('class [IDBFactory] inner property _operationQueue'),
 	    _status = Symbol('class [IDBFactory] inner property _status'),
-	    _pushInQueen = Symbol('class [IDBFactory] inner method _pushInQueen'),
-	    _popFromQueen = Symbol('class [IDBFactory] inner method _popFromQueen'),
+	    _pushInQueue = Symbol('class [IDBFactory] inner method _pushInQueue'),
+	    _popFromQueue = Symbol('class [IDBFactory] inner method _popFromQueue'),
 	    toString = Object.prototype.toString;
 
 	function excuteCallback(promise, successCallback, errorCallback) {
@@ -173,7 +191,7 @@
 	    this[_INDEXEDDB] = window.indexedDB || window.webkitIndexedDB;
 
 	    this[_dbConnectionPromise] = this[_init](dbName);
-	    this[_operationQueen] = []; // 用来保存
+	    this[_operationQueue] = []; // 用来保存
 	    this[_status] = 'done';
 
 	    excuteCallback(this[_dbConnectionPromise], function () {
@@ -216,17 +234,12 @@
 	      return promise;
 	    }
 	  }, {
-	    key: 'createTable',
-	    value: function createTable(tableName, param) {
+	    key: 'createObjectStore',
+	    value: function createObjectStore(tableName, param) {
 	      var _this = this;
 
-	      var queenObj = {};
-
-	      queenObj.promise = new Promise(function (resolve) {
-	        queenObj.resolve = resolve;
-	      });
-
-	      queenObj.promise.then(function () {
+	      // 使用一个队列来存储这些异步操作, 只有前一个完成后才会进行下一个
+	      var promise = this[_pushInQueue](function () {
 	        var dbPromise = _this[_dbConnectionPromise],
 	            dbInfo = {
 	          name: _this.name,
@@ -240,21 +253,16 @@
 	          dbInfo.tableInfo.param = param;
 	        }
 
-	        console.log('callback', tableName);
-
 	        Promise.all([dbPromise]).then(function () {
 	          dbInfo.db = self.db;
 	          dbInfo.version = self.version;
 
 	          self[_status] = 'pending';
 	          // 更新 IDBFactory 实例中的 _dbConnectionPromise
-	          console.log('createTable', tableName, self.version);
 	          self[_dbConnectionPromise] = self[_getConnection](dbInfo, self[_isUpgradeNeeded](dbInfo), function (response) {
 	            var db = response.db,
 	                dbInfo = response.dbInfo,
 	                event = response.event;
-
-	            console.log('createTable', dbInfo.tableInfo.name);
 	            try {
 	              db.createObjectStore(dbInfo.tableInfo.name, dbInfo.tableInfo.param);
 	            } catch (exception) {
@@ -265,24 +273,24 @@
 	              }
 	            }
 	          });
-	        }).then(function (db) {
-	          // 更新 IDBFactory 实例中的 db, 并创建 IObjectStore 对象
-	          self.db = db;
-	          return db;
 	        });
 	      });
 
-	      this[_operationQueen].push(queenObj);
-
-	      console.log('createTable', tableName, this[_status]);
 	      if (this[_status] == 'done') {
-	        this[_operationQueen].pop().resolve();
+	        this[_operationQueue].shift().resolve();
 	        this[_status] = 'pending';
 	      }
+
+	      return promise.then(function (db) {
+	        // 更新 IDBFactory 实例中的 db, 并创建 IObjectStore 对象
+	        _this.db = db;
+	        _this.readyPromise = promise;
+	        return _this[tableName] = new _IObjectStore2.default(tableName, self);
+	      });
 	    }
 	  }, {
-	    key: 'deleteTable',
-	    value: function deleteTable(tableName) {
+	    key: 'deleteObjectStore',
+	    value: function deleteObjectStore(tableName) {
 	      var dbInfo = {
 	        name: this.name
 	      };
@@ -345,10 +353,8 @@
 
 	        isUpgradeNeeded && dbParam.push(dbInfo.version);
 
-	        console.log('getConnection dbParam', dbParam);
 	        idbOpenRequest = indexedDB.open.apply(indexedDB, dbParam);
 
-	        console.log('_getConnection', dbInfo, 'isUpgradeNeeded', isUpgradeNeeded);
 	        if (isUpgradeNeeded) {
 	          idbOpenRequest.onupgradeneeded = function (event) {
 
@@ -365,12 +371,15 @@
 	        };
 
 	        idbOpenRequest.onsuccess = function () {
-	          self[_status] = 'done';
-	          resolve(idbOpenRequest.result);
-	          console.log('getConnection success', idbOpenRequest.result.version);
+	          var db = idbOpenRequest.result;
 
-	          if (self[_operationQueen].length) {
-	            self[_operationQueen].pop().resolve();
+	          self[_status] = 'done';
+	          self.db = db;
+	          self.version = db.version;
+	          resolve(db);
+
+	          if (isUpgradeNeeded && self[_operationQueue].length) {
+	            self[_operationQueue].shift().resolve(db);
 	          }
 	        };
 	      });
@@ -393,7 +402,6 @@
 	      if (isUpgrade || isNewStore) {
 	        if (isNewStore) {
 	          var incVersion = dbInfo.db.version + 1;
-	          console.log('isUpgradeNeeded incVersion', incVersion);
 	          if (incVersion > dbInfo.version) {
 	            dbInfo.version = this.version = incVersion;
 	          }
@@ -404,14 +412,85 @@
 	      return false;
 	    }
 	  }, {
-	    key: _pushInQueen,
-	    value: function value(dbInfo) {}
+	    key: _pushInQueue,
+	    value: function value(defferFn) {
+	      var queueObj = {};
+
+	      queueObj.promise = new Promise(function (resolve) {
+	        queueObj.resolve = resolve;
+	      });
+	      excuteCallback(queueObj.promise, defferFn);
+
+	      this[_operationQueue].push(queueObj);
+
+	      return queueObj.promise;
+	    }
 	  }]);
 
 	  return IDBFactory;
 	}();
 
 	exports.default = IDBFactory;
+
+/***/ },
+/* 3 */
+/***/ function(module, exports) {
+
+	'use strict';
+
+	Object.defineProperty(exports, "__esModule", {
+	  value: true
+	});
+
+	var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
+
+	function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+
+	var MODE = {
+	  RO: 'readyonly',
+	  RW: 'readwrite'
+	};
+
+	var IObjectStore = function () {
+	  function IObjectStore(name, IDBDatabase) {
+	    _classCallCheck(this, IObjectStore);
+
+	    this.name = name;
+	    this.dbInst = IDBDatabase;
+	  }
+
+	  _createClass(IObjectStore, [{
+	    key: 'setItem',
+	    value: function setItem(key, value) {
+	      var _this = this;
+
+	      console.log('IObjectStore setItem', key, value);
+	      var promise = new Promise(function (resolve, reject) {
+	        Promise.all([_this.dbInst.readyPromise]).then(function (db) {
+	          var transaction = db.transaction([_this.name], MODE.RW),
+	              objStore = transaction.objectStore(_this.name),
+	              req = objStore.put(key, value);
+
+	          value = value === null ? void 0 : value;
+	          transaction.oncomplete = function () {
+	            value = value === void 0 ? null : value;
+	            resolve(value);
+	          };
+
+	          transaction.onabort = transaction.onerror = function () {
+	            reject(transaction.error);
+	          };
+	        }).catch(reject);
+	      });
+
+	      return promise;
+	    }
+	  }]);
+
+	  return IObjectStore;
+	}();
+
+	exports.default = IObjectStore;
 
 /***/ }
 /******/ ]);

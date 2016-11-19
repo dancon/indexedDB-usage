@@ -2,8 +2,20 @@ import dbms from './DBMS';
 
 let dbObj = dbms.createDatabase('idbtest');
 
-dbObj.createTable('testTable');
+dbObj.createObjectStore('testTable');
 
-dbObj.createTable('userInfo', {keyPath: 'userId'});
+dbObj.createObjectStore('userInfo', {keyPath: 'userId'});
 
-dbObj.createTable('gradeInfo');
+var gradeTable = dbObj.createObjectStore('gradeInfo');
+
+/*
+console.log(gradeTable);
+gradeTable.then(function(table){
+  console.log('create table gradeInfo success, table is', table);
+  table.setItem('grade', {
+    name: 'John',
+    age: 23
+  }).then(function(value){
+    console.log('setItem success, value is', value);
+  });
+});*/
