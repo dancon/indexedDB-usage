@@ -54,14 +54,13 @@
 
 	var dbObj = _DBMS2.default.createDatabase('idbtest');
 
-	dbObj.createObjectStore('testTable');
+	/*dbObj.createObjectStore('testTable');
 
-	dbObj.createObjectStore('userInfo', { keyPath: 'userId' });
+	dbObj.createObjectStore('userInfo', {keyPath: 'userId'});*/
 
 	var gradeTable = dbObj.createObjectStore('gradeInfo');
 
-	/*
-	console.log(gradeTable);
+	/*console.log(gradeTable);
 	gradeTable.then(function(table){
 	  console.log('create table gradeInfo success, table is', table);
 	  table.setItem('grade', {
@@ -108,6 +107,7 @@
 	      var dbms = this;
 
 	      if (!this[_dataBaseMap][databaseName]) {
+	        console.log('create database', databaseName);
 	        this[_dataBaseMap][databaseName] = new _IDBFactory2.default(databaseName, success, error);
 	      }
 
@@ -253,13 +253,16 @@
 	          dbInfo.tableInfo.param = param;
 	        }
 
+	        console.log('step 1 ++++++++++++++++++++++++++++++++++++++++++++');
 	        Promise.all([dbPromise]).then(function () {
 	          dbInfo.db = self.db;
 	          dbInfo.version = self.version;
 
 	          self[_status] = 'pending';
 	          // 更新 IDBFactory 实例中的 _dbConnectionPromise
+	          console.log('step 2 +++++++++++++++++++++++++++++++++++++++++++');
 	          self[_dbConnectionPromise] = self[_getConnection](dbInfo, self[_isUpgradeNeeded](dbInfo), function (response) {
+
 	            var db = response.db,
 	                dbInfo = response.dbInfo,
 	                event = response.event;
@@ -281,11 +284,11 @@
 	        this[_status] = 'pending';
 	      }
 
-	      return promise.then(function (db) {
+	      return promise.then(function () {
 	        // 更新 IDBFactory 实例中的 db, 并创建 IObjectStore 对象
-	        _this.db = db;
+	        console.log('step 4 +++++++++++++++++++++++++++++++++++++++++++++++');
 	        _this.readyPromise = promise;
-	        return _this[tableName] = new _IObjectStore2.default(tableName, self);
+	        return _this[tableName] = new _IObjectStore2.default(tableName, _this);
 	      });
 	    }
 	  }, {
@@ -320,6 +323,7 @@
 
 	      promise = Promise.resolve().then(function () {
 	        // 尝试打开数据库
+	        console.log('_init');
 	        return self[_getConnection](dbInfo, false);
 	      }).then(function (db) {
 	        return dbInfo.db = self.db = db;
@@ -339,6 +343,7 @@
 
 	      return new Promise(function (resolve, reject) {
 	        // 先检查数据库实例是否存在，如果存在并且版本不一致，则关闭，否则返回该数据库实例
+	        console.log('dbInfo', dbInfo, isUpgradeNeeded);
 	        if (dbInfo.db) {
 	          if (isUpgradeNeeded) {
 	            dbInfo.db.close();
@@ -376,10 +381,12 @@
 	          self[_status] = 'done';
 	          self.db = db;
 	          self.version = db.version;
+	          console.log('step 3 +++++++++++++++++++++++++++++++++++++++++++++');
 	          resolve(db);
 
-	          if (isUpgradeNeeded && self[_operationQueue].length) {
-	            self[_operationQueue].shift().resolve(db);
+	          console.log('2222222: ', self[_operationQueue].length);
+	          if (self[_operationQueue].length) {
+	            self[_operationQueue].shift().resolve();
 	          }
 	        };
 	      });
@@ -419,11 +426,10 @@
 	      queueObj.promise = new Promise(function (resolve) {
 	        queueObj.resolve = resolve;
 	      });
-	      excuteCallback(queueObj.promise, defferFn);
 
 	      this[_operationQueue].push(queueObj);
 
-	      return queueObj.promise;
+	      return queueObj.promise.then(defferFn);
 	    }
 	  }]);
 
@@ -457,6 +463,8 @@
 
 	    this.name = name;
 	    this.dbInst = IDBDatabase;
+
+	    console.log('readPromise', this.dbInst.readyPromise);
 	  }
 
 	  _createClass(IObjectStore, [{
@@ -466,8 +474,10 @@
 
 	      console.log('IObjectStore setItem', key, value);
 	      var promise = new Promise(function (resolve, reject) {
-	        Promise.all([_this.dbInst.readyPromise]).then(function (db) {
-	          var transaction = db.transaction([_this.name], MODE.RW),
+
+	        Promise.all([_this.dbInst.readyPromise]).then(function () {
+	          var db = _this.dbInst.db,
+	              transaction = db.transaction([_this.name], MODE.RW),
 	              objStore = transaction.objectStore(_this.name),
 	              req = objStore.put(key, value);
 

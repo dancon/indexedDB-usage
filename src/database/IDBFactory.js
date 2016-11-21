@@ -93,13 +93,16 @@ class IDBFactory {
         dbInfo.tableInfo.param = param;
       }
 
+      console.log('step 1 ++++++++++++++++++++++++++++++++++++++++++++');
       Promise.all([dbPromise]).then(function () {
         dbInfo.db = self.db;
         dbInfo.version = self.version;
 
         self[_status] = 'pending';
         // 更新 IDBFactory 实例中的 _dbConnectionPromise
+        console.log('step 2 +++++++++++++++++++++++++++++++++++++++++++');
         self[_dbConnectionPromise] = self[_getConnection](dbInfo, self[_isUpgradeNeeded](dbInfo), (response) => {
+
           var db = response.db,
             dbInfo = response.dbInfo,
             event = response.event;
@@ -125,11 +128,11 @@ class IDBFactory {
       this[_status] = 'pending';
     }
 
-    return promise.then((db) => {
+    return promise.then(() => {
       // 更新 IDBFactory 实例中的 db, 并创建 IObjectStore 对象
-      this.db = db;
+      console.log('step 4 +++++++++++++++++++++++++++++++++++++++++++++++');
       this.readyPromise = promise;
-      return (this[tableName] = new IObjectStore(tableName, self));
+      return (this[tableName] = new IObjectStore(tableName, this));
     });
   }
 
@@ -159,6 +162,7 @@ class IDBFactory {
 
     promise = Promise.resolve().then(function () {
       // 尝试打开数据库
+      console.log('_init');
       return self[_getConnection](dbInfo, false);
     }).then(function (db) {
       return dbInfo.db = self.db = db;
@@ -175,6 +179,7 @@ class IDBFactory {
 
     return new Promise(function (resolve, reject) {
       // 先检查数据库实例是否存在，如果存在并且版本不一致，则关闭，否则返回该数据库实例
+      console.log('dbInfo', dbInfo, isUpgradeNeeded);
       if (dbInfo.db) {
         if (isUpgradeNeeded) {
           dbInfo.db.close();
@@ -212,10 +217,12 @@ class IDBFactory {
         self[_status] = 'done';
         self.db = db;
         self.version = db.version;
+        console.log('step 3 +++++++++++++++++++++++++++++++++++++++++++++');
         resolve(db);
 
-        if (isUpgradeNeeded && self[_operationQueue].length) {
-          self[_operationQueue].shift().resolve(db);
+        console.log('2222222: ', self[_operationQueue].length);
+        if (self[_operationQueue].length) {
+          self[_operationQueue].shift().resolve();
         }
       }
     });
@@ -253,11 +260,10 @@ class IDBFactory {
     queueObj.promise = new Promise(function(resolve){
       queueObj.resolve = resolve;
     });
-    excuteCallback(queueObj.promise, defferFn);
 
     this[_operationQueue].push(queueObj);
 
-    return queueObj.promise;
+    return queueObj.promise.then(defferFn);
   }
 }
 export default IDBFactory;
