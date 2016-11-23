@@ -12,7 +12,6 @@ class DBMS{
     var dbms = this;
 
     if(!this[_dataBaseMap][databaseName]){
-      console.log('create database', databaseName);
       this[_dataBaseMap][databaseName] = new IDBFactory(databaseName, success, error);
     }
 

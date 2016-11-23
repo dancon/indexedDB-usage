@@ -36,6 +36,7 @@ class IDBFactory {
     this.name = dbName;
     this.db = null;
     this.version = 1;
+    this.readyPromise = [];
     this[_INDEXEDDB] = window.indexedDB || window.webkitIndexedDB;
 
     this[_dbConnectionPromise] = this[_init](dbName);
@@ -78,64 +79,73 @@ class IDBFactory {
     return promise;
   }
 
+  /**
+   * @method createObjectStore
+   * */
   createObjectStore(tableName, param) {
-    // 使用一个队列来存储这些异步操作, 只有前一个完成后才会进行下一个
-    var promise = this[_pushInQueue](() => {
-      var dbPromise = this[_dbConnectionPromise],
+    var promise = Promise.all([this[_dbConnectionPromise]]).then(() => {
+      console.log('open db success');
+      var db = this.db,
         dbInfo = {
           name: this.name,
           tableInfo: {
             name: tableName
           }
-        }, self = this;
+        };
 
-      if (param && param.keyPath) {
+      if(param && param.keyPath){
         dbInfo.tableInfo.param = param;
       }
+      // 每次创建 table 的时候，都先来检测 table 是否已经存在，如果不存在，然后再创建
+      if(!db.objectStoreNames.contains(tableName)){
+        // 使用一个队列来存储这些异步操作, 只有前一个完成后才会进行下一个
+        var pushPromise = this[_pushInQueue](() => {
+          dbInfo.db = this.db;
+          dbInfo.version = this.version;
 
-      console.log('step 1 ++++++++++++++++++++++++++++++++++++++++++++');
-      Promise.all([dbPromise]).then(function () {
-        dbInfo.db = self.db;
-        dbInfo.version = self.version;
+          this[_status] = 'pending';
+          // 更新 IDBFactory 实例中的 _dbConnectionPromise
+          this[_dbConnectionPromise] = this[_getConnection](dbInfo, this[_isUpgradeNeeded](dbInfo), (response) => {
 
-        self[_status] = 'pending';
-        // 更新 IDBFactory 实例中的 _dbConnectionPromise
-        console.log('step 2 +++++++++++++++++++++++++++++++++++++++++++');
-        self[_dbConnectionPromise] = self[_getConnection](dbInfo, self[_isUpgradeNeeded](dbInfo), (response) => {
-
-          var db = response.db,
-            dbInfo = response.dbInfo,
-            event = response.event;
-          try {
-            db.createObjectStore(dbInfo.tableInfo.name, dbInfo.tableInfo.param);
-          } catch (exception) {
-            if (exception.name == 'ConstraintError') {
-              console.warn('The database "' + dbInfo.name + '"' +
-                ' has been upgraded from version ' + event.oldVersion +
-                ' to version ' + event.newVersion +
-                ', but the storage "' + dbInfo.tableInfo.name + '" already exists.');
-            } else {
-              throw exception;
+            var db = response.db,
+              dbInfo = response.dbInfo,
+              event = response.event;
+            try {
+              db.createObjectStore(dbInfo.tableInfo.name, dbInfo.tableInfo.param);
+            } catch (exception) {
+              if (exception.name == 'ConstraintError') {
+                console.warn('The database "' + dbInfo.name + '"' +
+                  ' has been upgraded from version ' + event.oldVersion +
+                  ' to version ' + event.newVersion +
+                  ', but the storage "' + dbInfo.tableInfo.name + '" already exists.');
+              } else {
+                throw exception;
+              }
             }
-          }
+          });
+
+          return this[_dbConnectionPromise];
         });
-      });
+
+        if (this[_status] == 'done') {
+          this[_operationQueue].shift().resolve();
+          this[_status] = 'pending';
+        }
+
+        return pushPromise;
+      }else{
+        return Promise.resolve();
+      }
     });
 
-
-    if (this[_status] == 'done') {
-      this[_operationQueue].shift().resolve();
-      this[_status] = 'pending';
-    }
-
-    return promise.then(() => {
-      // 更新 IDBFactory 实例中的 db, 并创建 IObjectStore 对象
-      console.log('step 4 +++++++++++++++++++++++++++++++++++++++++++++++');
-      this.readyPromise = promise;
-      return (this[tableName] = new IObjectStore(tableName, this));
-    });
+    this.readyPromise.push(promise);
+    return (this[tableName] = new IObjectStore(tableName, this));
   }
 
+  /**
+   * @method deleteObjectStore
+   *
+   */
   deleteObjectStore(tableName) {
     var dbInfo = {
       name: this.name
@@ -162,10 +172,7 @@ class IDBFactory {
 
     promise = Promise.resolve().then(function () {
       // 尝试打开数据库
-      console.log('_init');
       return self[_getConnection](dbInfo, false);
-    }).then(function (db) {
-      return dbInfo.db = self.db = db;
     });
 
     excuteCallback(promise, success, error);
@@ -175,11 +182,8 @@ class IDBFactory {
 
   // 创建链接
   [_getConnection](dbInfo, isUpgradeNeeded, callback) {
-    var self = this;
-
-    return new Promise(function (resolve, reject) {
+    return new Promise((resolve, reject) => {
       // 先检查数据库实例是否存在，如果存在并且版本不一致，则关闭，否则返回该数据库实例
-      console.log('dbInfo', dbInfo, isUpgradeNeeded);
       if (dbInfo.db) {
         if (isUpgradeNeeded) {
           dbInfo.db.close();
@@ -188,7 +192,7 @@ class IDBFactory {
         }
       }
 
-      var indexedDB = self[_INDEXEDDB],
+      var indexedDB = this[_INDEXEDDB],
         dbParam = [dbInfo.name],
         idbOpenRequest;
 
@@ -197,7 +201,7 @@ class IDBFactory {
       idbOpenRequest = indexedDB.open.apply(indexedDB, dbParam);
 
       if (isUpgradeNeeded) {
-        idbOpenRequest.onupgradeneeded = function (event) {
+        idbOpenRequest.onupgradeneeded = (event) => {
 
           callback && callback({
             event: event,
@@ -207,22 +211,20 @@ class IDBFactory {
         }
       }
 
-      idbOpenRequest.onerror = function () {
+      idbOpenRequest.onerror = () => {
         reject(idbOpenRequest.error);
       }
 
-      idbOpenRequest.onsuccess = function () {
+      idbOpenRequest.onsuccess = () => {
         var db = idbOpenRequest.result;
 
-        self[_status] = 'done';
-        self.db = db;
-        self.version = db.version;
-        console.log('step 3 +++++++++++++++++++++++++++++++++++++++++++++');
+        this[_status] = 'done';
+        this.db = db;
+        this.version = db.version;
         resolve(db);
 
-        console.log('2222222: ', self[_operationQueue].length);
-        if (self[_operationQueue].length) {
-          self[_operationQueue].shift().resolve();
+        if (isUpgradeNeeded && this[_operationQueue].length) {
+          this[_operationQueue].shift().resolve();
         }
       }
     });

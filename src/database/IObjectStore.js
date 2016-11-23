@@ -7,19 +7,17 @@ class IObjectStore{
   constructor(name, IDBDatabase){
     this.name = name;
     this.dbInst = IDBDatabase;
-
-    console.log('readPromise', this.dbInst.readyPromise);
   }
 
   setItem(key, value){
-    console.log('IObjectStore setItem', key, value);
     var promise = new Promise((resolve, reject) => {
-
-      Promise.all([this.dbInst.readyPromise]).then(() => {
+      // console.log(this.dbInst.readyPromise);
+      Promise.all(this.dbInst.readyPromise).then(() => {
+        console.log('begin setItem', this.name, key, value);
         var db = this.dbInst.db,
           transaction = db.transaction([this.name], MODE.RW),
           objStore = transaction.objectStore(this.name),
-          req = objStore.put(key, value);
+          req = objStore.put(value, key);
 
         value = value === null ? void 0 : value;
         transaction.oncomplete = function(){

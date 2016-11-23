@@ -58,18 +58,40 @@
 
 	dbObj.createObjectStore('userInfo', {keyPath: 'userId'});*/
 
-	var gradeTable = dbObj.createObjectStore('gradeInfo');
+	var gradeTable = dbObj.createObjectStore('gradeInfo'),
+	    userInfoTable = dbObj.createObjectStore('userInfo');
 
-	/*console.log(gradeTable);
-	gradeTable.then(function(table){
-	  console.log('create table gradeInfo success, table is', table);
-	  table.setItem('grade', {
-	    name: 'John',
-	    age: 23
-	  }).then(function(value){
-	    console.log('setItem success, value is', value);
-	  });
-	});*/
+	gradeTable.setItem('grade', {
+	  name: 'John',
+	  age: 23
+	}).then(function (value) {
+	  console.log('setItem success, value is', value);
+	});
+
+	gradeTable.setItem('test', {
+	  name: 'test',
+	  age: 77
+	}).then(function (value) {
+	  return console.log('setItem in gradeInfo success, value is', value);
+	});
+
+	userInfoTable.setItem('user1', {
+	  name: 'Terry',
+	  age: 25
+	}).then(function (value) {
+	  console.log('setItem in userInfo success, value is', value);
+	});
+
+	gradeTable.setItem('test', {
+	  name: 'yy',
+	  age: 89
+	}).then(function (value) {
+	  return console.log('update info in grade table success');
+	});
+
+	gradeTable.setItem('test', {}).then(function (value) {
+	  return console.log('哟呵呵呵');
+	});
 
 /***/ },
 /* 1 */
@@ -107,7 +129,6 @@
 	      var dbms = this;
 
 	      if (!this[_dataBaseMap][databaseName]) {
-	        console.log('create database', databaseName);
 	        this[_dataBaseMap][databaseName] = new _IDBFactory2.default(databaseName, success, error);
 	      }
 
@@ -188,6 +209,7 @@
 	    this.name = dbName;
 	    this.db = null;
 	    this.version = 1;
+	    this.readyPromise = [];
 	    this[_INDEXEDDB] = window.indexedDB || window.webkitIndexedDB;
 
 	    this[_dbConnectionPromise] = this[_init](dbName);
@@ -233,64 +255,77 @@
 
 	      return promise;
 	    }
+
+	    /**
+	     * @method createObjectStore
+	     * */
+
 	  }, {
 	    key: 'createObjectStore',
 	    value: function createObjectStore(tableName, param) {
 	      var _this = this;
 
-	      // 使用一个队列来存储这些异步操作, 只有前一个完成后才会进行下一个
-	      var promise = this[_pushInQueue](function () {
-	        var dbPromise = _this[_dbConnectionPromise],
+	      var promise = Promise.all([this[_dbConnectionPromise]]).then(function () {
+	        console.log('open db success');
+	        var db = _this.db,
 	            dbInfo = {
 	          name: _this.name,
 	          tableInfo: {
 	            name: tableName
 	          }
-	        },
-	            self = _this;
+	        };
 
 	        if (param && param.keyPath) {
 	          dbInfo.tableInfo.param = param;
 	        }
+	        // 每次创建 table 的时候，都先来检测 table 是否已经存在，如果不存在，然后再创建
+	        if (!db.objectStoreNames.contains(tableName)) {
+	          // 使用一个队列来存储这些异步操作, 只有前一个完成后才会进行下一个
+	          var pushPromise = _this[_pushInQueue](function () {
+	            dbInfo.db = _this.db;
+	            dbInfo.version = _this.version;
 
-	        console.log('step 1 ++++++++++++++++++++++++++++++++++++++++++++');
-	        Promise.all([dbPromise]).then(function () {
-	          dbInfo.db = self.db;
-	          dbInfo.version = self.version;
+	            _this[_status] = 'pending';
+	            // 更新 IDBFactory 实例中的 _dbConnectionPromise
+	            _this[_dbConnectionPromise] = _this[_getConnection](dbInfo, _this[_isUpgradeNeeded](dbInfo), function (response) {
 
-	          self[_status] = 'pending';
-	          // 更新 IDBFactory 实例中的 _dbConnectionPromise
-	          console.log('step 2 +++++++++++++++++++++++++++++++++++++++++++');
-	          self[_dbConnectionPromise] = self[_getConnection](dbInfo, self[_isUpgradeNeeded](dbInfo), function (response) {
-
-	            var db = response.db,
-	                dbInfo = response.dbInfo,
-	                event = response.event;
-	            try {
-	              db.createObjectStore(dbInfo.tableInfo.name, dbInfo.tableInfo.param);
-	            } catch (exception) {
-	              if (exception.name == 'ConstraintError') {
-	                console.warn('The database "' + dbInfo.name + '"' + ' has been upgraded from version ' + event.oldVersion + ' to version ' + event.newVersion + ', but the storage "' + dbInfo.tableInfo.name + '" already exists.');
-	              } else {
-	                throw exception;
+	              var db = response.db,
+	                  dbInfo = response.dbInfo,
+	                  event = response.event;
+	              try {
+	                db.createObjectStore(dbInfo.tableInfo.name, dbInfo.tableInfo.param);
+	              } catch (exception) {
+	                if (exception.name == 'ConstraintError') {
+	                  console.warn('The database "' + dbInfo.name + '"' + ' has been upgraded from version ' + event.oldVersion + ' to version ' + event.newVersion + ', but the storage "' + dbInfo.tableInfo.name + '" already exists.');
+	                } else {
+	                  throw exception;
+	                }
 	              }
-	            }
+	            });
+
+	            return _this[_dbConnectionPromise];
 	          });
-	        });
+
+	          if (_this[_status] == 'done') {
+	            _this[_operationQueue].shift().resolve();
+	            _this[_status] = 'pending';
+	          }
+
+	          return pushPromise;
+	        } else {
+	          return Promise.resolve();
+	        }
 	      });
 
-	      if (this[_status] == 'done') {
-	        this[_operationQueue].shift().resolve();
-	        this[_status] = 'pending';
-	      }
-
-	      return promise.then(function () {
-	        // 更新 IDBFactory 实例中的 db, 并创建 IObjectStore 对象
-	        console.log('step 4 +++++++++++++++++++++++++++++++++++++++++++++++');
-	        _this.readyPromise = promise;
-	        return _this[tableName] = new _IObjectStore2.default(tableName, _this);
-	      });
+	      this.readyPromise.push(promise);
+	      return this[tableName] = new _IObjectStore2.default(tableName, this);
 	    }
+
+	    /**
+	     * @method deleteObjectStore
+	     *
+	     */
+
 	  }, {
 	    key: 'deleteObjectStore',
 	    value: function deleteObjectStore(tableName) {
@@ -323,10 +358,7 @@
 
 	      promise = Promise.resolve().then(function () {
 	        // 尝试打开数据库
-	        console.log('_init');
 	        return self[_getConnection](dbInfo, false);
-	      }).then(function (db) {
-	        return dbInfo.db = self.db = db;
 	      });
 
 	      excuteCallback(promise, success, error);
@@ -339,11 +371,10 @@
 	  }, {
 	    key: _getConnection,
 	    value: function value(dbInfo, isUpgradeNeeded, callback) {
-	      var self = this;
+	      var _this2 = this;
 
 	      return new Promise(function (resolve, reject) {
 	        // 先检查数据库实例是否存在，如果存在并且版本不一致，则关闭，否则返回该数据库实例
-	        console.log('dbInfo', dbInfo, isUpgradeNeeded);
 	        if (dbInfo.db) {
 	          if (isUpgradeNeeded) {
 	            dbInfo.db.close();
@@ -352,7 +383,7 @@
 	          }
 	        }
 
-	        var indexedDB = self[_INDEXEDDB],
+	        var indexedDB = _this2[_INDEXEDDB],
 	            dbParam = [dbInfo.name],
 	            idbOpenRequest;
 
@@ -378,15 +409,13 @@
 	        idbOpenRequest.onsuccess = function () {
 	          var db = idbOpenRequest.result;
 
-	          self[_status] = 'done';
-	          self.db = db;
-	          self.version = db.version;
-	          console.log('step 3 +++++++++++++++++++++++++++++++++++++++++++++');
+	          _this2[_status] = 'done';
+	          _this2.db = db;
+	          _this2.version = db.version;
 	          resolve(db);
 
-	          console.log('2222222: ', self[_operationQueue].length);
-	          if (self[_operationQueue].length) {
-	            self[_operationQueue].shift().resolve();
+	          if (isUpgradeNeeded && _this2[_operationQueue].length) {
+	            _this2[_operationQueue].shift().resolve();
 	          }
 	        };
 	      });
@@ -463,8 +492,6 @@
 
 	    this.name = name;
 	    this.dbInst = IDBDatabase;
-
-	    console.log('readPromise', this.dbInst.readyPromise);
 	  }
 
 	  _createClass(IObjectStore, [{
@@ -472,14 +499,14 @@
 	    value: function setItem(key, value) {
 	      var _this = this;
 
-	      console.log('IObjectStore setItem', key, value);
 	      var promise = new Promise(function (resolve, reject) {
-
-	        Promise.all([_this.dbInst.readyPromise]).then(function () {
+	        // console.log(this.dbInst.readyPromise);
+	        Promise.all(_this.dbInst.readyPromise).then(function () {
+	          console.log('begin setItem', _this.name, key, value);
 	          var db = _this.dbInst.db,
 	              transaction = db.transaction([_this.name], MODE.RW),
 	              objStore = transaction.objectStore(_this.name),
-	              req = objStore.put(key, value);
+	              req = objStore.put(value, key);
 
 	          value = value === null ? void 0 : value;
 	          transaction.oncomplete = function () {
