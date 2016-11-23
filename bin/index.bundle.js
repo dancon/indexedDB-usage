@@ -93,6 +93,11 @@
 	  return console.log('哟呵呵呵');
 	});
 
+	// 获取数据
+	gradeTable.getItem('grade').then(function (value) {
+	  return console.log('getItem success, value is', value);
+	});
+
 /***/ },
 /* 1 */
 /***/ function(module, exports, __webpack_require__) {
@@ -258,6 +263,9 @@
 
 	    /**
 	     * @method createObjectStore
+	     * @param tableName     表名称
+	     * @param param         表配置
+	     * @return IObjectStore IObjectStore 实例
 	     * */
 
 	  }, {
@@ -482,7 +490,7 @@
 	function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
 
 	var MODE = {
-	  RO: 'readyonly',
+	  RO: 'readonly',
 	  RW: 'readwrite'
 	};
 
@@ -518,6 +526,32 @@
 	            reject(transaction.error);
 	          };
 	        }).catch(reject);
+	      });
+
+	      return promise;
+	    }
+	  }, {
+	    key: 'getItem',
+	    value: function getItem(key) {
+	      var _this2 = this;
+
+	      var promise = new Promise(function (resolve, reject) {
+	        Promise.all(_this2.dbInst.readyPromise).then(function () {
+	          var db = _this2.dbInst.db,
+	              transaction = db.transaction(_this2.name, MODE.RO),
+	              objStore = transaction.objectStore(_this2.name),
+	              req = objStore.get(key);
+
+	          req.onsuccess = function () {
+	            var val = req.result;
+	            val = val === void 0 ? null : val;
+	            resolve(val);
+	          };
+
+	          req.onerror = function () {
+	            reject(req.error);
+	          };
+	        });
 	      });
 
 	      return promise;

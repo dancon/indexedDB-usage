@@ -34,3 +34,6 @@ gradeTable.setItem('test', {
 }).then(value => console.log('update info in grade table success'));
 
 gradeTable.setItem('test', {}).then(value => console.log('哟呵呵呵'));
+
+// 获取数据
+gradeTable.getItem('grade').then(value => console.log('getItem success, value is', value));

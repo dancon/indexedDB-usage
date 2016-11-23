@@ -1,5 +1,5 @@
 const MODE = {
-  RO: 'readyonly',
+  RO: 'readonly',
   RW: 'readwrite'
 };
 
@@ -33,6 +33,31 @@ class IObjectStore{
 
     return promise;
   }
+
+  getItem(key){
+    var promise = new Promise((resolve, reject) => {
+      Promise.all(this.dbInst.readyPromise).then(() => {
+        var db = this.dbInst.db,
+          transaction = db.transaction(this.name, MODE.RO),
+          objStore = transaction.objectStore(this.name),
+          req = objStore.get(key);
+
+        req.onsuccess = function(){
+          var val = req.result;
+          val = val === void 0 ? null : val;
+          resolve(val);
+        };
+
+        req.onerror = function(){
+          reject(req.error);
+        };
+      });
+    });
+
+    return promise;
+  }
+
+
 }
 
 export default IObjectStore;

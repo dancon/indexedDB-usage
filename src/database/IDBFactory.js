@@ -81,6 +81,9 @@ class IDBFactory {
 
   /**
    * @method createObjectStore
+   * @param tableName     表名称
+   * @param param         表配置
+   * @return IObjectStore IObjectStore 实例
    * */
   createObjectStore(tableName, param) {
     var promise = Promise.all([this[_dbConnectionPromise]]).then(() => {
