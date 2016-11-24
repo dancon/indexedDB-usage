@@ -52,15 +52,14 @@
 
 	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
+	// 创建数据库
 	var dbObj = _DBMS2.default.createDatabase('idbtest');
 
-	/*dbObj.createObjectStore('testTable');
-
-	dbObj.createObjectStore('userInfo', {keyPath: 'userId'});*/
-
+	// 创建表
 	var gradeTable = dbObj.createObjectStore('gradeInfo'),
 	    userInfoTable = dbObj.createObjectStore('userInfo');
 
+	// 插入数据
 	gradeTable.setItem('grade', {
 	  name: 'John',
 	  age: 23
@@ -96,6 +95,11 @@
 	// 获取数据
 	gradeTable.getItem('grade').then(function (value) {
 	  return console.log('getItem success, value is', value);
+	});
+
+	// 删除数据
+	gradeTable.removeItem('test').then(function () {
+	  return console.log('removeItem success');
 	});
 
 /***/ },
@@ -492,7 +496,9 @@
 	var MODE = {
 	  RO: 'readonly',
 	  RW: 'readwrite'
-	};
+	},
+	    _keyRange = Symbol('class [IObjectStore] inner method that create a key range'),
+	    toString = Object.prototype.toString;
 
 	var IObjectStore = function () {
 	  function IObjectStore(name, IDBDatabase) {
@@ -555,6 +561,49 @@
 	      });
 
 	      return promise;
+	    }
+	  }, {
+	    key: 'removeItem',
+	    value: function removeItem(key) {
+	      var _this3 = this;
+
+	      var promise = new Promise(function (resolve, reject) {
+	        Promise.all(_this3.dbInst.readyPromise).then(function () {
+	          var db = _this3.dbInst.db,
+	              transaction = db.transaction(_this3.name, MODE.RW),
+	              objStore = transaction.objectStore(_this3.name),
+	              req = objStore.delete(key);
+
+	          req.onsuccess = function () {
+	            console.log(req.result);
+	            resolve();
+	          };
+
+	          req.onerror = function () {
+	            reject(req.error);
+	          };
+	        });
+	      });
+
+	      return promise;
+	    }
+
+	    // 私有方法
+	    /**
+	     * @description 生成一个 key 的范围，用来获取或者删除该范围内的数据
+	     * @method _keyRange
+	     * @param String | Object
+	     * @return IDBRange
+	     * */
+
+	  }, {
+	    key: _keyRange,
+	    value: function value(rangeObject) {
+	      var key, value;
+
+	      if (toString.call(rangeObject) == '[object Object]') {} else {
+	        IDBKeyRange.only(rangeObject);
+	      }
 	    }
 	  }]);
 

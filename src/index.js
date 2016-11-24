@@ -1,14 +1,13 @@
 import dbms from './DBMS';
 
+// 创建数据库
 let dbObj = dbms.createDatabase('idbtest');
 
-/*dbObj.createObjectStore('testTable');
-
-dbObj.createObjectStore('userInfo', {keyPath: 'userId'});*/
-
+// 创建表
 var gradeTable = dbObj.createObjectStore('gradeInfo'),
   userInfoTable = dbObj.createObjectStore('userInfo');
 
+// 插入数据
 gradeTable.setItem('grade', {
   name: 'John',
   age: 23
@@ -37,3 +36,6 @@ gradeTable.setItem('test', {}).then(value => console.log('哟呵呵呵'));
 
 // 获取数据
 gradeTable.getItem('grade').then(value => console.log('getItem success, value is', value));
+
+// 删除数据
+gradeTable.removeItem('test').then(() => console.log('removeItem success'));
