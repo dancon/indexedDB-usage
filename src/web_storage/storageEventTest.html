@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Title</title>
+</head>
+<body>
+
+<script>
+  // 同一域下，不同 tab / 窗口下的不同页面是否可以访问到 sessionStorage 的内容
+  console.log(sessionStorage.getItem('name'));
+
+  console.log('localStorage:', localStorage.getItem('name'));
+
+  window.addEventListener('storage', function(evt){
+    console.log('oldValue:', evt.oldValue, ' newValue:', evt.newValue, ' key:', evt.key);
+  }, false);
+</script>
+</body>
+</html>
