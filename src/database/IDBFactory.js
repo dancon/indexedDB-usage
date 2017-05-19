@@ -1,4 +1,5 @@
 import IObjectStore from './IObjectStore';
+import safeCall from '../util/safeCall';
 
 // 私有属性和方法
 const _getConnection = Symbol('class [IDBFactory] inner method _getConnection'),
@@ -9,72 +10,52 @@ const _getConnection = Symbol('class [IDBFactory] inner method _getConnection'),
   _operationQueue = Symbol('class [IDBFactory] inner property _operationQueue'),
   _status = Symbol('class [IDBFactory] inner property _status'),
   _pushInQueue = Symbol('class [IDBFactory] inner method _pushInQueue'),
-  _popFromQueue = Symbol('class [IDBFactory] inner method _popFromQueue'),
-
-  toString = Object.prototype.toString;
-
-function excuteCallback(promise, successCallback, errorCallback) {
-  if (toString.call(successCallback) === '[object Function]') {
-    promise.then(successCallback);
-  }
-
-  if (errorCallback) {
-    promise.catch(errorCallback);
-  }
-}
+  _popFromQueue = Symbol('class [IDBFactory] inner method _popFromQueue');
 
 class IDBFactory {
 
   /**
-   * @description  IDBFactory 构造函数
-   * @method constructor
+   * @method constructor    IDBFactory 构造函数
    * @param dbName          数据库名
    * */
   constructor(dbName, success, error) {
-    var self = this;
-
     this.name = dbName;
     this.db = null;
     this.version = 1;
     this.readyPromise = [];
     this[_INDEXEDDB] = window.indexedDB || window.webkitIndexedDB;
 
-    this[_dbConnectionPromise] = this[_init](dbName);
-    this[_operationQueue] = []; // 用来保存
+    this[_dbConnectionPromise] = this[_init](dbName, success, error);
+    this[_operationQueue] = []; // 用来保存操作
     this[_status] = 'done';
-
-    excuteCallback(this[_dbConnectionPromise], () => {
-      toString.call(success) === '[object Function]' && success(self);
-    }, error);
   }
 
   // 公有方法
   /**
-   * @description   删除指定名称的数据库
-   * @method  destory
+   * @method  destory         删除指定名称的数据库
    * @param   success         删除成功后的回调
    * @param   error           删除失败的回调
    * @return  Promise
    * */
-  destory(success, error) {
+  drop(success, error) {
     var indexedDB = this[_INDEXEDDB],
-      self = this,
       promise;
 
-    promise = new Promise(function (resolve, reject) {
-      var deleteRequest = indexedDB.deleteDatabase(self.name);
+    promise = new Promise((resolve, reject) => {
+      this.db && this.db.close();
+      var deleteRequest = indexedDB.deleteDatabase(this.name);
 
-      deleteRequest.onsuccess = function (event) {
-        self.db = deleteRequest.result;
+      deleteRequest.onsuccess = () => {
+        this.db = deleteRequest.result;
         resolve(deleteRequest.result);
       };
 
-      deleteRequest.onerror = function (event) {
+      deleteRequest.onerror = () => {
         reject(deleteRequest.error);
       };
     });
 
-    excuteCallback(promise, success, error);
+    safeCall(promise, success, error);
 
     return promise;
   }
@@ -178,7 +159,7 @@ class IDBFactory {
       return self[_getConnection](dbInfo, false);
     });
 
-    excuteCallback(promise, success, error);
+    safeCall(promise, success, error);
 
     return promise;
   }
@@ -224,11 +205,11 @@ class IDBFactory {
         this[_status] = 'done';
         this.db = db;
         this.version = db.version;
-        resolve(db);
 
         if (isUpgradeNeeded && this[_operationQueue].length) {
           this[_operationQueue].shift().resolve();
         }
+        resolve(db);
       }
     });
   }

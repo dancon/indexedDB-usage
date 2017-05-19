@@ -2,7 +2,6 @@
 
 这篇文章将逐步带你学习 indexedDB 的异步 API.
 
-
 #### `Method` IDBObjectStore.delete(key|IDBRange)
 
 `delete` 方法用来删除一条或者多条记录。
